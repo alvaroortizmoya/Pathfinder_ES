@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pathfinder-es"
+version = "0.1.0"
+description = "Scraper + traductor para contenido de Pathfinder 2e (AON)."
+requires-python = ">=3.10"
+dependencies = [
+  "requests>=2.32.0",
+  "beautifulsoup4>=4.12.0",
+  "lxml>=5.2.0",
+  "deep-translator>=1.11.4",
+]
+
+[project.scripts]
+pathfinder-es = "pathfinder_es.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

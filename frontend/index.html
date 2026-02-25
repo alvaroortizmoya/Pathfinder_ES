@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pathfinder ES · Reader</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+      :root {
+        --bg: #0a0f1e;
+        --panel: #111a32;
+        --panel-2: #182344;
+        --text: #eaf0ff;
+        --muted: #9da9cf;
+        --accent: #78a3ff;
+        --accent-2: #3dd0b8;
+        --line: #2a3763;
+        --danger: #ff7a7a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: radial-gradient(1000px 500px at 20% -10%, #1d2a57 0, var(--bg) 65%);
+        color: var(--text);
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 300px 360px 1fr;
+        gap: .9rem;
+        padding: .9rem;
+        min-height: 100vh;
+      }
+
+      .card {
+        background: rgba(17, 26, 50, .94);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .card-head {
+        padding: .75rem .8rem;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(120,163,255,.09), transparent);
+      }
+      .card-body { padding: .7rem; overflow: auto; min-height: 0; }
+
+      .title { font-size: .95rem; font-weight: 700; margin: 0; }
+      .meta { color: var(--muted); font-size: .82rem; }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto;
+        gap: .55rem;
+        margin-top: .55rem;
+      }
+
+      input, select, button {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: .52rem .62rem;
+      }
+      button { cursor: pointer; }
+      button.primary {
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        color: #0d1225;
+        border: 0;
+        font-weight: 700;
+      }
+
+      .error { color: var(--danger); font-size: .82rem; margin-top: .4rem; }
+      .ok { color: var(--accent-2); font-size: .82rem; margin-top: .4rem; }
+
+      .tree-search { margin-bottom: .6rem; width: 100%; }
+      .group {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        margin-bottom: .5rem;
+        overflow: hidden;
+      }
+      .group-toggle {
+        width: 100%;
+        text-align: left;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        background: rgba(120,163,255,.08);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 700;
+      }
+      .child-list { padding: .35rem; display: grid; gap: .22rem; }
+      .child-btn {
+        text-align: left;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        color: var(--text);
+        padding: .42rem .5rem;
+      }
+      .child-btn:hover { background: rgba(120,163,255,.1); border-color: var(--line); }
+      .child-btn.active { background: rgba(61,208,184,.16); border-color: var(--accent-2); }
+
+      .rule-item {
+        border-bottom: 1px solid var(--line);
+        padding: .58rem .35rem;
+        cursor: pointer;
+      }
+      .rule-item:hover { background: rgba(120,163,255,.1); }
+      .rule-item.active { border-left: 3px solid var(--accent-2); background: rgba(61,208,184,.12); }
+
+      .reader-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .6rem;
+      }
+      .chips { display: flex; gap: .4rem; }
+      .chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: .3rem .6rem;
+        background: var(--panel-2);
+        font-size: .78rem;
+        cursor: pointer;
+      }
+      .chip.active { border-color: var(--accent-2); color: var(--accent-2); }
+
+      .reader-wrap {
+        max-width: 980px;
+        width: 100%;
+        margin: 0 auto;
+      }
+      .reader-panel {
+        margin-top: .65rem;
+        background: #f9fbff;
+        color: #1f2937;
+        border-radius: 12px;
+        border: 1px solid #d3dcf4;
+        padding: 1rem;
+        line-height: 1.62;
+      }
+      .reader-panel p { margin: 0 0 .75rem; }
+      .reader-panel .line-header { font-weight: 700; margin-top: 1rem; color: #0f172a; }
+
+      .reader-panel .aon-link { color: #1d4ed8; text-decoration: underline; }
+      .reader-panel .aon-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: .85rem 0;
+      }
+      .reader-panel .aon-table th,
+      .reader-panel .aon-table td {
+        border: 1px solid #cdd7f3;
+        padding: .4rem .5rem;
+      }
+      .reader-panel .aon-table th { background: #e9eefb; }
+
+      .empty { color: var(--muted); font-size: .9rem; padding: .4rem; }
+
+      @media (max-width: 1200px) {
+        .app { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="app">
+      <section class="card">
+        <div class="card-head">
+          <p class="title">Navegación</p>
+          <div class="meta">Páginas: {{ stats.pages }} · ES: {{ stats.translations_es }} · HTML: {{ stats.pages_with_html || 0 }}</div>
+          <input class="tree-search" v-model="menuFilter" placeholder="Filtrar categorías/subcategorías..." />
+        </div>
+
+        <div class="card-body">
+          <div class="group">
+            <button class="child-btn" :class="{active: !selected.category && !selected.subcategory}" @click="selectNode('', '')">Todo el reglamento</button>
+          </div>
+
+          <div class="group" v-for="node in filteredTaxonomy" :key="node.category">
+            <button class="group-toggle" @click="toggle(node.category)">
+              <span>{{ humanize(node.category) }}</span>
+              <span>{{ expanded[node.category] ? '▾' : '▸' }}</span>
+            </button>
+            <div class="child-list" v-if="expanded[node.category]">
+              <button class="child-btn" :class="{active: selected.category===node.category && !selected.subcategory}" @click="selectNode(node.category, '')">
+                Todas · {{ nodeCount(node.category) }}
+              </button>
+              <button
+                class="child-btn"
+                v-for="sub in node.subcategories"
+                :key="`${node.category}:${sub}`"
+                :class="{active: selected.category===node.category && selected.subcategory===sub}"
+                @click="selectNode(node.category, sub)"
+              >
+                {{ humanize(sub) }} · {{ subCount(node.category, sub) }}
+              </button>
+            </div>
+          </div>
+
+          <div class="empty" v-if="!filteredTaxonomy.length">No hay categorías para ese filtro.</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <p class="title">Listado</p>
+          <div class="toolbar">
+            <input v-model="query" placeholder="Buscar por texto..." />
+            <select v-model="lang"><option value="es">ES</option><option value="en">EN</option></select>
+            <button @click="reconnect">Conectar</button>
+            <button class="primary" @click="refreshRules">Actualizar</button>
+          </div>
+          <input style="margin-top:.45rem; width:100%" v-model="api" placeholder="URL API (ej: http://192.168.1.50:8000)" />
+          <div class="meta" style="margin-top:.3rem">{{ rules.length }} resultados</div>
+          <div class="ok" v-if="connected">API conectada</div>
+          <div class="error" v-if="errorMsg">{{ errorMsg }}</div>
+        </div>
+        <div class="card-body">
+          <div class="rule-item" :class="{active: selectedRule && selectedRule.id===r.id}" v-for="r in rules" :key="r.id" @click="openRule(r.id)">
+            <div><strong>{{ r.title || '(sin título)' }}</strong></div>
+            <div class="meta">{{ humanize(r.category) }} / {{ humanize(r.subcategory) }} · {{ r.lang }}</div>
+            <div class="meta">{{ r.snippet }}</div>
+          </div>
+          <div class="empty" v-if="!rules.length">No hay resultados para esta selección.</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head reader-head">
+          <div>
+            <p class="title" style="margin-bottom:.2rem">{{ selectedRule ? selectedRule.title : 'Reader' }}</p>
+            <div class="meta" v-if="selectedRule">{{ humanize(selectedRule.category) }} / {{ humanize(selectedRule.subcategory) }} · idioma: {{ selectedRule.lang_served }}</div>
+          </div>
+          <div class="chips">
+            <span class="chip" :class="{active: viewMode==='pretty'}" @click="viewMode='pretty'">Texto formateado</span>
+            <span class="chip" :class="{active: viewMode==='html'}" @click="viewMode='html'">HTML original (EN)</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="reader-wrap" v-if="selectedRule">
+            <div class="reader-panel" v-if="viewMode==='pretty'" v-html="prettyTextHtml"></div>
+            <div class="reader-panel" v-else @click="handleHtmlClick" v-html="htmlReader"></div>
+            <div class="empty" v-if="viewMode==='html' && !selectedRule.content_html_en">No hay HTML preservado para esta entrada (re-scrapea para poblarlo).</div>
+          </div>
+          <div class="empty" v-else>Selecciona una entrada para leerla.</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const { createApp } = Vue
+      const defaultApi = `${window.location.protocol}//${window.location.hostname}:8000`
+
+      createApp({
+        data() {
+          return {
+            api: defaultApi,
+            connected: false,
+            errorMsg: '',
+            stats: { pages: 0, translations_es: 0, pages_with_html: 0 },
+            taxonomy: [],
+            expanded: {},
+            menuFilter: '',
+            selected: { category: '', subcategory: '' },
+            query: '',
+            lang: 'es',
+            rules: [],
+            selectedRule: null,
+            viewMode: 'pretty',
+            debounceId: null,
+          }
+        },
+        computed: {
+          filteredTaxonomy() {
+            const q = this.menuFilter.trim().toLowerCase()
+            if (!q) return this.taxonomy
+            return this.taxonomy
+              .map((node) => {
+                const cat = node.category.toLowerCase()
+                const subs = node.subcategories.filter((s) => s.toLowerCase().includes(q))
+                if (cat.includes(q) || subs.length) {
+                  return { category: node.category, subcategories: subs.length ? subs : node.subcategories }
+                }
+                return null
+              })
+              .filter(Boolean)
+          },
+          prettyTextHtml() {
+            if (!this.selectedRule?.content) return ''
+            const lines = this.selectedRule.content
+              .split('\n')
+              .map((x) => x.trim())
+              .filter((x) => x.length > 0)
+
+            return lines.map((line) => {
+              const esc = line.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+              const isHeader = line.length < 72 && (line.endsWith(':') || /^[A-Z0-9\s\-()]+$/.test(line))
+              return isHeader ? `<p class="line-header">${esc}</p>` : `<p>${esc}</p>`
+            }).join('')
+          },
+          htmlReader() {
+            if (!this.selectedRule?.content_html_en) return ''
+            return this.selectedRule.content_html_en
+              .replaceAll('<table', '<table class="aon-table"')
+              .replaceAll('<a ', '<a class="aon-link" ')
+          },
+        },
+        watch: {
+          query() {
+            clearTimeout(this.debounceId)
+            this.debounceId = setTimeout(() => this.refreshRules(), 220)
+          },
+          lang() { this.refreshRules() },
+          selected: {
+            deep: true,
+            handler() { this.refreshRules() },
+          },
+        },
+        async mounted() {
+          await this.reconnect()
+        },
+        methods: {
+          humanize(raw) {
+            if (!raw) return 'General'
+            return raw
+              .replaceAll('_', ' ')
+              .replaceAll('-', ' ')
+              .replace(/([a-z])([A-Z])/g, '$1 $2')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .replace(/\b\w/g, (m) => m.toUpperCase())
+          },
+          async apiGet(path) {
+            const res = await fetch(`${this.api}${path}`)
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+            return res.json()
+          },
+          async reconnect() {
+            this.errorMsg = ''
+            this.connected = false
+            try {
+              this.stats = await this.apiGet('/stats')
+              this.taxonomy = await this.apiGet('/taxonomy')
+              for (const n of this.taxonomy) {
+                if (!(n.category in this.expanded)) this.expanded[n.category] = this.taxonomy.length <= 12
+              }
+              this.connected = true
+              await this.refreshRules()
+            } catch (err) {
+              this.errorMsg = `No se pudo conectar con API (${this.api}): ${err.message}`
+              this.taxonomy = []
+              this.rules = []
+              this.selectedRule = null
+            }
+          },
+          toggle(category) {
+            this.expanded[category] = !this.expanded[category]
+          },
+          selectNode(category, subcategory) {
+            this.selected = { category, subcategory }
+          },
+          async refreshRules() {
+            if (!this.connected) return
+            this.errorMsg = ''
+            try {
+              const url = new URL(`${this.api}/rules`)
+              if (this.selected.category) url.searchParams.set('category', this.selected.category)
+              if (this.selected.subcategory) url.searchParams.set('subcategory', this.selected.subcategory)
+              if (this.query.trim()) url.searchParams.set('q', this.query.trim())
+              url.searchParams.set('lang', this.lang)
+              url.searchParams.set('limit', '250')
+              const data = await fetch(url).then((r) => r.json())
+              this.rules = data.items || []
+
+              if (this.selectedRule && !this.rules.find((x) => x.id === this.selectedRule.id)) {
+                this.selectedRule = null
+              }
+              if (!this.selectedRule && this.rules.length) {
+                await this.openRule(this.rules[0].id)
+              }
+            } catch (err) {
+              this.errorMsg = `Error cargando listado: ${err.message}`
+            }
+          },
+          async openRule(id) {
+            try {
+              const url = `${this.api}/rules/${id}?lang=${this.lang}`
+              this.selectedRule = await fetch(url).then((r) => r.json())
+            } catch (err) {
+              this.errorMsg = `Error cargando detalle: ${err.message}`
+            }
+          },
+          nodeCount(category) {
+            return this.rules.filter((r) => r.category === category).length
+          },
+          subCount(category, sub) {
+            return this.rules.filter((r) => r.category === category && r.subcategory === sub).length
+          },
+          async handleHtmlClick(event) {
+            const a = event.target.closest('a[data-internal-url]')
+            if (!a) return
+            event.preventDefault()
+            const internal = a.getAttribute('data-internal-url')
+            if (!internal) return
+            try {
+              const detail = await this.apiGet(`/rules/by-url?url=${encodeURIComponent(internal)}&lang=${this.lang}`)
+              this.selectedRule = detail
+            } catch (err) {
+              this.errorMsg = `No se pudo abrir enlace interno: ${err.message}`
+            }
+          },
+        },
+      }).mount('#app')
+    </script>
+  </body>
+</html>

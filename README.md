@@ -68,3 +68,25 @@ Abre `http://localhost:4173`.
 - El frontend refresca resultados en tiempo real al escribir (debounce).
 - `pages.subcategory` se rellena desde la URL durante el scraping.
 - Si falta traducción para `lang`, el backend usa fallback EN.
+
+
+## Diagnóstico rápido si no ves contenido
+
+1. Comprueba que la API tenga datos:
+
+```bash
+curl http://127.0.0.1:8000/stats
+```
+
+Si `pages` es `0`, aún no hay contenido cargado en esa DB.
+
+2. Asegúrate de usar la misma DB en scrape y serve:
+
+```bash
+pathfinder-es scrape --db data/pathfinder.db --max-pages 300
+pathfinder-es translate --db data/pathfinder.db --lang es
+pathfinder-es serve --host 0.0.0.0 --port 8000
+```
+
+3. Si abres el frontend desde otra máquina, revisa la URL API en la propia UI (campo `URL API`).
+

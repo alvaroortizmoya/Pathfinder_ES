@@ -50,6 +50,14 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+
+    @app.get("/stats")
+    def stats() -> dict:
+        with connect(db_path) as conn:
+            pages = conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
+            translated_es = conn.execute("SELECT COUNT(*) FROM translations WHERE lang = 'es'").fetchone()[0]
+        return {"pages": pages, "translations_es": translated_es}
+
     @app.get("/taxonomy")
     def taxonomy() -> list[dict]:
         with connect(db_path) as conn:

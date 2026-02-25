@@ -15,6 +15,7 @@
         --accent: #7c9cff;
         --accent-2: #35d0ba;
         --border: #2a355d;
+        --danger: #ff7a7a;
       }
       * { box-sizing: border-box; }
       body {
@@ -45,16 +46,13 @@
         border-radius: 10px;
         padding: .55rem .7rem;
       }
-      input { min-width: 280px; }
+      input { min-width: 240px; }
+      .api-input { min-width: 300px; }
       button { cursor: pointer; }
       button.primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #0b1020; border: 0; font-weight: 700; }
       .layout { display: grid; grid-template-columns: 420px 1fr; gap: 1rem; min-height: 0; }
       .panel { min-height: 0; overflow: auto; }
-      .list-item {
-        padding: .75rem;
-        border-bottom: 1px solid var(--border);
-        cursor: pointer;
-      }
+      .list-item { padding: .75rem; border-bottom: 1px solid var(--border); cursor: pointer; }
       .list-item:hover { background: rgba(124,156,255,.1); }
       .list-item.active { background: rgba(53,208,186,.12); border-left: 3px solid var(--accent-2); }
       .meta { color: var(--muted); font-size: .82rem; }
@@ -66,15 +64,16 @@
       .chip.active { border-color: var(--accent); color: var(--accent-2); }
       .muted { color: var(--muted); }
       .empty { padding: 1rem; color: var(--muted); }
-      @media (max-width: 1100px) {
-        .app, .layout { grid-template-columns: 1fr; }
-      }
+      .error { color: var(--danger); font-size: .85rem; }
+      .ok { color: var(--accent-2); font-size: .85rem; }
+      @media (max-width: 1100px) { .app, .layout { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body>
     <div id="app" class="app">
       <aside class="sidebar">
         <h2 style="margin-top:.2rem">Categorías</h2>
+        <div class="meta" style="margin-bottom:.6rem">Páginas en DB: {{ stats.pages }} · traducciones ES: {{ stats.translations_es }}</div>
         <div class="chips" style="margin-bottom:.7rem">
           <span class="chip" :class="{active: !selectedCategory}" @click="pickCategory('', '')">Todas</span>
         </div>
@@ -83,27 +82,25 @@
           <div class="cat-name">{{ node.category }}</div>
           <div class="chips">
             <span class="chip" :class="{active: selectedCategory===node.category && !selectedSubcategory}" @click="pickCategory(node.category, '')">Todo</span>
-            <span
-              class="chip"
-              v-for="sub in node.subcategories"
-              :key="`${node.category}:${sub}`"
+            <span class="chip" v-for="sub in node.subcategories" :key="`${node.category}:${sub}`"
               :class="{active: selectedCategory===node.category && selectedSubcategory===sub}"
-              @click="pickCategory(node.category, sub)"
-            >{{ sub }}</span>
+              @click="pickCategory(node.category, sub)">{{ sub }}</span>
           </div>
         </div>
+        <div v-if="!taxonomy.length && !errorMsg" class="empty">Sin categorías. Comprueba conexión API o que hayas hecho scrape.</div>
       </aside>
 
       <main class="content">
         <section class="toolbar">
           <strong>Pathfinder 2e · Interno</strong>
-          <input v-model="query" placeholder="Buscar por texto (actualiza en tiempo real)..." />
-          <select v-model="lang">
-            <option value="es">Castellano</option>
-            <option value="en">English</option>
-          </select>
+          <input class="api-input" v-model="api" placeholder="URL API" />
+          <button @click="reconnect">Conectar API</button>
+          <input v-model="query" placeholder="Buscar por texto (tiempo real)..." />
+          <select v-model="lang"><option value="es">Castellano</option><option value="en">English</option></select>
           <button class="primary" @click="refresh">Actualizar</button>
           <span class="muted">{{ totalLabel }}</span>
+          <span class="ok" v-if="connected">API conectada</span>
+          <span class="error" v-if="errorMsg">{{ errorMsg }}</span>
         </section>
 
         <section class="layout">
@@ -113,7 +110,7 @@
               <div class="meta">{{ rule.category }} / {{ rule.subcategory }} · {{ rule.lang }}</div>
               <div class="meta">{{ rule.snippet }}</div>
             </div>
-            <div v-if="!rules.length" class="empty">No hay resultados para esos filtros.</div>
+            <div v-if="!rules.length" class="empty">No hay resultados. Si esperabas datos, revisa que `pathfinder-es scrape` usó la misma DB que `pathfinder-es serve`.</div>
           </article>
 
           <article class="panel">
@@ -122,7 +119,7 @@
               <div class="meta">{{ selectedRule.category }} / {{ selectedRule.subcategory }} · idioma mostrado: {{ selectedRule.lang_served }}</div>
               <p>{{ selectedRule.content }}</p>
             </div>
-            <div v-else class="empty">Selecciona una entrada del listado para ver el contenido completo.</div>
+            <div v-else class="empty">Selecciona una entrada del listado para ver contenido completo.</div>
           </article>
         </section>
       </main>
@@ -130,19 +127,23 @@
 
     <script>
       const { createApp } = Vue
+      const defaultApi = `${window.location.protocol}//${window.location.hostname}:8000`
 
       createApp({
         data() {
           return {
-            api: 'http://localhost:8000',
+            api: defaultApi,
             query: '',
             lang: 'es',
             taxonomy: [],
+            stats: { pages: 0, translations_es: 0 },
             selectedCategory: '',
             selectedSubcategory: '',
             rules: [],
             selectedRule: null,
             debounce: null,
+            errorMsg: '',
+            connected: false,
           }
         },
         computed: {
@@ -156,40 +157,64 @@
           query() { this.debouncedRefresh() },
           lang() { this.refresh() },
         },
-        async mounted() {
-          await this.loadTaxonomy()
-          await this.refresh()
-        },
+        async mounted() { await this.reconnect() },
         methods: {
+          async apiGet(path) {
+            const res = await fetch(`${this.api}${path}`)
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+            return res.json()
+          },
           debouncedRefresh() {
             clearTimeout(this.debounce)
             this.debounce = setTimeout(() => this.refresh(), 250)
           },
-          async loadTaxonomy() {
-            this.taxonomy = await fetch(`${this.api}/taxonomy`).then(r => r.json())
+          async reconnect() {
+            this.errorMsg = ''
+            this.connected = false
+            try {
+              this.stats = await this.apiGet('/stats')
+              this.taxonomy = await this.apiGet('/taxonomy')
+              this.connected = true
+              await this.refresh()
+            } catch (err) {
+              this.errorMsg = `No se pudo conectar a API (${this.api}). Error: ${err.message}`
+              this.taxonomy = []
+              this.rules = []
+              this.selectedRule = null
+              this.stats = { pages: 0, translations_es: 0 }
+            }
           },
           async refresh() {
-            const url = new URL(`${this.api}/rules`)
-            if (this.query) url.searchParams.set('q', this.query)
-            if (this.selectedCategory) url.searchParams.set('category', this.selectedCategory)
-            if (this.selectedSubcategory) url.searchParams.set('subcategory', this.selectedSubcategory)
-            url.searchParams.set('lang', this.lang)
-            url.searchParams.set('limit', '150')
+            this.errorMsg = ''
+            try {
+              const url = new URL(`${this.api}/rules`)
+              if (this.query) url.searchParams.set('q', this.query)
+              if (this.selectedCategory) url.searchParams.set('category', this.selectedCategory)
+              if (this.selectedSubcategory) url.searchParams.set('subcategory', this.selectedSubcategory)
+              url.searchParams.set('lang', this.lang)
+              url.searchParams.set('limit', '150')
 
-            const data = await fetch(url).then(r => r.json())
-            this.rules = data.items || []
+              const data = await fetch(url).then(r => r.json())
+              this.rules = data.items || []
 
-            if (this.selectedRule) {
-              const found = this.rules.find(x => x.id === this.selectedRule.id)
-              if (!found) this.selectedRule = null
-            }
-            if (!this.selectedRule && this.rules.length) {
-              this.openRule(this.rules[0].id)
+              if (this.selectedRule) {
+                const found = this.rules.find(x => x.id === this.selectedRule.id)
+                if (!found) this.selectedRule = null
+              }
+              if (!this.selectedRule && this.rules.length) {
+                await this.openRule(this.rules[0].id)
+              }
+            } catch (err) {
+              this.errorMsg = `Error cargando reglas: ${err.message}`
             }
           },
           async openRule(id) {
-            const url = `${this.api}/rules/${id}?lang=${this.lang}`
-            this.selectedRule = await fetch(url).then(r => r.json())
+            try {
+              const url = `${this.api}/rules/${id}?lang=${this.lang}`
+              this.selectedRule = await fetch(url).then(r => r.json())
+            } catch (err) {
+              this.errorMsg = `Error cargando detalle: ${err.message}`
+            }
           },
           async pickCategory(category, subcategory) {
             this.selectedCategory = category

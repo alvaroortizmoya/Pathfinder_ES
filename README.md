@@ -1,15 +1,15 @@
 # Pathfinder_ES
 
-Base inicial para crear un **repositorio interno bilingüe (EN/ES)** del contenido de Pathfinder 2e desde [2e.aonprd.com](https://2e.aonprd.com), con scraping responsable y traducción automática.
+Pipeline para montar una copia interna bilingüe (EN/ES) de contenido de Pathfinder 2e desde `2e.aonprd.com`, con:
 
-> ⚠️ Úsalo solo con consentimiento explícito del propietario del contenido, respetando términos de uso, `robots.txt`, límites de tráfico y copyright.
+- Scraper responsable
+- Base de datos SQLite
+- Traducción EN→ES
+- Backend FastAPI (búsqueda + filtros)
+- Frontend Vue con toggle de idioma
+- Capa opcional de búsqueda semántica (embeddings hash + cache)
 
-## Qué incluye este MVP
-
-- **Scraper** de páginas internas de AON2e.
-- **Almacenamiento SQLite** con contenido en inglés.
-- **Pipeline de traducción** (por defecto EN→ES) manteniendo ambos idiomas.
-- **Export JSON bilingüe** para alimentar una web interna.
+> ⚠️ Úsalo solo con consentimiento explícito del propietario del contenido y respetando ToS/robots/copyright.
 
 ## Instalación
 
@@ -19,45 +19,54 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-## Flujo recomendado
+## Flujo completo
 
-1. **Scrapear** contenido en inglés:
+### 1) Scrapear
 
 ```bash
 pathfinder-es scrape --db data/pathfinder.db --max-pages 200 --delay 1.2
 ```
 
-2. **Traducir** al castellano:
+### 2) Traducir
 
 ```bash
 pathfinder-es translate --db data/pathfinder.db --lang es
 ```
 
-3. **Exportar JSON bilingüe**:
+### 3) (Opcional) Generar embeddings para búsqueda semántica
 
 ```bash
-pathfinder-es export --db data/pathfinder.db --output data/pathfinder_bilingual.json
+pathfinder-es embed --db data/pathfinder.db --dims 128
 ```
 
-## Estructura de datos
+### 4) Levantar backend API
 
-- `pages`: URL, título y `content_en`.
-- `translations`: traducciones por idioma (`lang`), vinculadas por `page_id`.
+```bash
+pathfinder-es serve --host 0.0.0.0 --port 8000
+```
 
-Esto te permite montar una UI interna con selector de idioma y fallback al inglés cuando falte traducción.
+Documentación interactiva: `http://localhost:8000/docs`
 
-## Siguiente paso sugerido (web interna)
+### 5) Frontend interno
 
-Con `data/pathfinder_bilingual.json`, puedes crear:
+Sirve `frontend/index.html` con cualquier servidor estático:
 
-- Backend FastAPI (búsqueda + filtros por categoría).
-- Frontend (Next.js, Vue o Svelte) con toggle EN/ES.
-- Cache semántica y vector DB opcional para búsquedas tipo “reglas relacionadas”.
+```bash
+python -m http.server 4173 -d frontend
+```
 
-## Nota de calidad de traducción
+Abre `http://localhost:4173`.
 
-La traducción automática te da velocidad, pero para términos reglísticos conviene:
+## Endpoints principales
 
-- Glosario propio (traits, condiciones, acciones, etc.).
-- Post-edición humana para reglas clave.
-- QA de consistencia terminológica.
+- `GET /rules?q=&category=&lang=&limit=&offset=`
+- `GET /rules/{id}`
+- `GET /rules/{id}/related?limit=&lang=`
+- `GET /categories`
+
+## Notas de arquitectura
+
+- `pages.category` se infiere de la URL (primer segmento de path) y permite filtros.
+- `page_vectors` guarda embeddings hash (sin dependencias pesadas).
+- `semantic_cache` cachea resultados de relacionados para consultas repetidas.
+- Si falta traducción en `lang`, el backend hace fallback a contenido EN.

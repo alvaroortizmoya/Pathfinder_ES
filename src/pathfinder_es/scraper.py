@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 class PageData:
     url: str
     title: str
+    category: str
     content_en: str
 
 
@@ -53,7 +54,7 @@ class AONScraper:
             if page:
                 yield page
 
-                for link in self._extract_links(page.url, page.content_en):
+                for link in self._extract_links(page.url):
                     if link not in seen:
                         queue.append(link)
 
@@ -77,11 +78,9 @@ class AONScraper:
         if not text:
             return None
 
-        return PageData(url=url, title=title, content_en=text)
+        return PageData(url=url, title=title, category=self._category_from_url(url), content_en=text)
 
-    def _extract_links(self, base_url: str, page_text: str) -> list[str]:
-        # Los enlaces reales se obtienen leyendo el HTML de nuevo para no mezclar lógica
-        # de parseo con limpieza de texto. Evitamos extraer enlaces desde texto plano.
+    def _extract_links(self, base_url: str) -> list[str]:
         response = self.session.get(base_url, timeout=self.timeout_s)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "lxml")
@@ -102,8 +101,14 @@ class AONScraper:
                 normalized += f"?{parsed.query}"
             links.append(normalized)
 
-        # Deduplicación preservando orden
         return list(dict.fromkeys(links))
+
+    @staticmethod
+    def _category_from_url(url: str) -> str:
+        path = urlparse(url).path.strip("/")
+        if not path:
+            return "home"
+        return path.split("/")[0].lower()
 
 
 def utc_now_iso() -> str:

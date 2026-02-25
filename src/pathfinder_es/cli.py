@@ -7,6 +7,7 @@ from pathlib import Path
 from .scraper import AONScraper, utc_now_iso
 from .semantic import build_hash_embedding, to_json, utc_now_iso as semantic_now
 from .storage import connect
+from .server import run_api
 
 
 def cmd_scrape(args: argparse.Namespace) -> None:
@@ -116,14 +117,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
 
 
 def cmd_serve(args: argparse.Namespace) -> None:
-    import uvicorn
-
-    uvicorn.run(
-        "pathfinder_es.api:app",
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-    )
+    run_api(host=args.host, port=args.port, reload=args.reload)
 
 
 def build_parser() -> argparse.ArgumentParser:

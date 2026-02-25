@@ -90,3 +90,32 @@ pathfinder-es serve --host 0.0.0.0 --port 8000
 
 3. Si abres el frontend desde otra máquina, revisa la URL API en la propia UI (campo `URL API`).
 
+
+
+## Menú jerárquico (nuevo)
+
+El frontend ya no muestra categorías técnicas tipo `*.aspx`.
+Ahora presenta un menú legible y desplegable por dominios:
+
+- Character Creation
+  - Ancestries
+  - Archetypes
+  - Backgrounds
+  - Classes
+- Equipment
+  - All Equipment
+  - Adventuring Gear
+  - Alchemical Items
+  - Armor
+  - Held Items
+  - Runes
+  - Shields
+  - Weapons
+  - Worn Items
+- Feats
+  - All Feats
+  - General
+  - General (NoSkill)
+  - Skill
+
+La asignación a ese menú se hace por coincidencias de texto (`title`, `url`, etc.) para que sea navegable incluso con datos scrapeados heterogéneos.

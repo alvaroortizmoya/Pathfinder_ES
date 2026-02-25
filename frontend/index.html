@@ -3,366 +3,392 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pathfinder ES - Biblioteca Interna</title>
+    <title>Pathfinder ES · Reader</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <style>
       :root {
-        --bg: #0b1020;
-        --panel: #131a2e;
-        --panel-soft: #1b2542;
-        --text: #eef2ff;
-        --muted: #9aa5ce;
-        --accent: #7c9cff;
-        --accent-2: #35d0ba;
-        --border: #2a355d;
+        --bg: #0a0f1e;
+        --panel: #111a32;
+        --panel-2: #182344;
+        --text: #eaf0ff;
+        --muted: #9da9cf;
+        --accent: #78a3ff;
+        --accent-2: #3dd0b8;
+        --line: #2a3763;
         --danger: #ff7a7a;
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-        background: radial-gradient(1200px 500px at 20% -10%, #1a2752 0, var(--bg) 60%);
+        background: radial-gradient(1000px 500px at 20% -10%, #1d2a57 0, var(--bg) 65%);
         color: var(--text);
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial;
       }
-      .app { display: grid; grid-template-columns: 320px 1fr; min-height: 100vh; }
-      .sidebar {
-        background: rgba(12, 17, 33, .75);
-        border-right: 1px solid var(--border);
-        backdrop-filter: blur(10px);
-        padding: 1rem;
-        overflow: auto;
-      }
-      .content { padding: 1rem; display: grid; grid-template-rows: auto 1fr; gap: 1rem; }
-      .toolbar, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
-      .toolbar { padding: .8rem; display: flex; gap: .7rem; flex-wrap: wrap; align-items: center; }
-      input, select, button {
-        background: var(--panel-soft);
-        color: var(--text);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: .55rem .7rem;
-      }
-      input { min-width: 240px; }
-      .api-input { min-width: 300px; }
-      button { cursor: pointer; }
-      button.primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #0b1020; border: 0; font-weight: 700; }
 
-      .layout { display: grid; grid-template-columns: 390px 1fr; gap: 1rem; min-height: 0; }
-      .panel { min-height: 0; overflow: auto; }
-      .list-item { padding: .75rem; border-bottom: 1px solid var(--border); cursor: pointer; }
-      .list-item:hover { background: rgba(124,156,255,.1); }
-      .list-item.active { background: rgba(53,208,186,.12); border-left: 3px solid var(--accent-2); }
+      .app {
+        display: grid;
+        grid-template-columns: 300px 360px 1fr;
+        gap: .9rem;
+        padding: .9rem;
+        min-height: 100vh;
+      }
+
+      .card {
+        background: rgba(17, 26, 50, .94);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .card-head {
+        padding: .75rem .8rem;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(120,163,255,.09), transparent);
+      }
+      .card-body { padding: .7rem; overflow: auto; min-height: 0; }
+
+      .title { font-size: .95rem; font-weight: 700; margin: 0; }
       .meta { color: var(--muted); font-size: .82rem; }
-      .muted { color: var(--muted); }
-      .empty { padding: 1rem; color: var(--muted); }
-      .error { color: var(--danger); font-size: .85rem; }
-      .ok { color: var(--accent-2); font-size: .85rem; }
 
-      .menu-root { display: flex; flex-direction: column; gap: .4rem; margin-top: .8rem; }
-      .group { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-      .group-header {
+      .toolbar {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto;
+        gap: .55rem;
+        margin-top: .55rem;
+      }
+
+      input, select, button {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: .52rem .62rem;
+      }
+      button { cursor: pointer; }
+      button.primary {
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        color: #0d1225;
+        border: 0;
+        font-weight: 700;
+      }
+
+      .error { color: var(--danger); font-size: .82rem; margin-top: .4rem; }
+      .ok { color: var(--accent-2); font-size: .82rem; margin-top: .4rem; }
+
+      .tree-search { margin-bottom: .6rem; width: 100%; }
+      .group {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        margin-bottom: .5rem;
+        overflow: hidden;
+      }
+      .group-toggle {
         width: 100%;
+        text-align: left;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        background: rgba(120,163,255,.08);
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: #172040;
-        border: 0;
-        color: var(--text);
         font-weight: 700;
-        padding: .6rem .75rem;
       }
-      .children { padding: .4rem; display: flex; flex-direction: column; gap: .25rem; }
+      .child-list { padding: .35rem; display: grid; gap: .22rem; }
       .child-btn {
         text-align: left;
         background: transparent;
         border: 1px solid transparent;
-        color: var(--text);
-        padding: .45rem .55rem;
         border-radius: 8px;
-        font-size: .9rem;
+        color: var(--text);
+        padding: .42rem .5rem;
       }
-      .child-btn:hover { background: rgba(124,156,255,.12); border-color: var(--border); }
-      .child-btn.active { background: rgba(53,208,186,.14); border-color: var(--accent-2); }
+      .child-btn:hover { background: rgba(120,163,255,.1); border-color: var(--line); }
+      .child-btn.active { background: rgba(61,208,184,.16); border-color: var(--accent-2); }
 
-      .reader { padding: 1.25rem; max-width: 920px; margin: 0 auto; }
-      .reader h2 { margin-top: 0; margin-bottom: .2rem; }
-      .reader-meta { color: var(--muted); margin-bottom: 1rem; }
-      .reader-content {
-        background: #fbfbff;
+      .rule-item {
+        border-bottom: 1px solid var(--line);
+        padding: .58rem .35rem;
+        cursor: pointer;
+      }
+      .rule-item:hover { background: rgba(120,163,255,.1); }
+      .rule-item.active { border-left: 3px solid var(--accent-2); background: rgba(61,208,184,.12); }
+
+      .reader-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .6rem;
+      }
+      .chips { display: flex; gap: .4rem; }
+      .chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: .3rem .6rem;
+        background: var(--panel-2);
+        font-size: .78rem;
+        cursor: pointer;
+      }
+      .chip.active { border-color: var(--accent-2); color: var(--accent-2); }
+
+      .reader-wrap {
+        max-width: 980px;
+        width: 100%;
+        margin: 0 auto;
+      }
+      .reader-panel {
+        margin-top: .65rem;
+        background: #f9fbff;
         color: #1f2937;
-        border-radius: 14px;
-        padding: 1.1rem;
-        line-height: 1.65;
-        border: 1px solid #d9def2;
+        border-radius: 12px;
+        border: 1px solid #d3dcf4;
+        padding: 1rem;
+        line-height: 1.62;
       }
-      .reader-content p { margin: 0 0 .8rem; }
-      .reader-content .line-header {
-        font-weight: 700;
-        margin-top: 1.1rem;
-        color: #0f172a;
-      }
-      .reader-content .aon-link { color: #1d4ed8; text-decoration: underline; }
-      .reader-content .aon-table {
+      .reader-panel p { margin: 0 0 .75rem; }
+      .reader-panel .line-header { font-weight: 700; margin-top: 1rem; color: #0f172a; }
+
+      .reader-panel .aon-link { color: #1d4ed8; text-decoration: underline; }
+      .reader-panel .aon-table {
         width: 100%;
         border-collapse: collapse;
-        margin: .8rem 0;
-        font-size: .95rem;
+        margin: .85rem 0;
       }
-      .reader-content .aon-table th,
-      .reader-content .aon-table td {
-        border: 1px solid #cbd5e1;
-        padding: .4rem .45rem;
+      .reader-panel .aon-table th,
+      .reader-panel .aon-table td {
+        border: 1px solid #cdd7f3;
+        padding: .4rem .5rem;
       }
-      .reader-content .aon-table th {
-        background: #e2e8f0;
-      }
+      .reader-panel .aon-table th { background: #e9eefb; }
 
-      @media (max-width: 1100px) { .app, .layout { grid-template-columns: 1fr; } }
+      .empty { color: var(--muted); font-size: .9rem; padding: .4rem; }
+
+      @media (max-width: 1200px) {
+        .app { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
     <div id="app" class="app">
-      <aside class="sidebar">
-        <h2 style="margin-top:.2rem">Navegación</h2>
-        <div class="meta">Páginas en DB: {{ stats.pages }} · traducciones ES: {{ stats.translations_es }}</div>
+      <section class="card">
+        <div class="card-head">
+          <p class="title">Navegación</p>
+          <div class="meta">Páginas: {{ stats.pages }} · ES: {{ stats.translations_es }} · HTML: {{ stats.pages_with_html || 0 }}</div>
+          <input class="tree-search" v-model="menuFilter" placeholder="Filtrar categorías/subcategorías..." />
+        </div>
 
-        <div class="menu-root">
-          <button class="child-btn" :class="{active: selectedGroup===''}" @click="selectNode('', '')">Todos los contenidos</button>
+        <div class="card-body">
+          <div class="group">
+            <button class="child-btn" :class="{active: !selected.category && !selected.subcategory}" @click="selectNode('', '')">Todo el reglamento</button>
+          </div>
 
-          <div class="group" v-for="group in menuTree" :key="group.name">
-            <button class="group-header" @click="toggleGroup(group.name)">
-              <span>{{ group.name }} ({{ groupCount(group.name) }})</span>
-              <span>{{ expandedGroups[group.name] ? '▾' : '▸' }}</span>
+          <div class="group" v-for="node in filteredTaxonomy" :key="node.category">
+            <button class="group-toggle" @click="toggle(node.category)">
+              <span>{{ humanize(node.category) }}</span>
+              <span>{{ expanded[node.category] ? '▾' : '▸' }}</span>
             </button>
-
-            <div class="children" v-if="expandedGroups[group.name]">
-              <button class="child-btn" :class="{active: selectedGroup===group.name && selectedChild===''}" @click="selectNode(group.name, '')">
-                All {{ group.name }}
+            <div class="child-list" v-if="expanded[node.category]">
+              <button class="child-btn" :class="{active: selected.category===node.category && !selected.subcategory}" @click="selectNode(node.category, '')">
+                Todas · {{ nodeCount(node.category) }}
               </button>
               <button
                 class="child-btn"
-                v-for="child in group.children"
-                :key="`${group.name}:${child}`"
-                :class="{active: selectedGroup===group.name && selectedChild===child}"
-                @click="selectNode(group.name, child)"
+                v-for="sub in node.subcategories"
+                :key="`${node.category}:${sub}`"
+                :class="{active: selected.category===node.category && selected.subcategory===sub}"
+                @click="selectNode(node.category, sub)"
               >
-                {{ child }} ({{ childCount(group.name, child) }})
+                {{ humanize(sub) }} · {{ subCount(node.category, sub) }}
               </button>
             </div>
           </div>
+
+          <div class="empty" v-if="!filteredTaxonomy.length">No hay categorías para ese filtro.</div>
         </div>
-      </aside>
+      </section>
 
-      <main class="content">
-        <section class="toolbar">
-          <strong>Pathfinder 2e · Interno</strong>
-          <input class="api-input" v-model="api" placeholder="URL API" />
-          <button @click="reconnect">Conectar API</button>
-          <input v-model="query" placeholder="Buscar (tiempo real)..." />
-          <select v-model="lang"><option value="es">Castellano</option><option value="en">English</option></select>
-          <button class="primary" @click="refreshAllRules">Actualizar</button>
-          <span class="muted">{{ filteredRules.length }} resultados</span>
-          <span class="ok" v-if="connected">API conectada</span>
-          <span class="error" v-if="errorMsg">{{ errorMsg }}</span>
-        </section>
+      <section class="card">
+        <div class="card-head">
+          <p class="title">Listado</p>
+          <div class="toolbar">
+            <input v-model="query" placeholder="Buscar por texto..." />
+            <select v-model="lang"><option value="es">ES</option><option value="en">EN</option></select>
+            <button @click="reconnect">Conectar</button>
+            <button class="primary" @click="refreshRules">Actualizar</button>
+          </div>
+          <input style="margin-top:.45rem; width:100%" v-model="api" placeholder="URL API (ej: http://192.168.1.50:8000)" />
+          <div class="meta" style="margin-top:.3rem">{{ rules.length }} resultados</div>
+          <div class="ok" v-if="connected">API conectada</div>
+          <div class="error" v-if="errorMsg">{{ errorMsg }}</div>
+        </div>
+        <div class="card-body">
+          <div class="rule-item" :class="{active: selectedRule && selectedRule.id===r.id}" v-for="r in rules" :key="r.id" @click="openRule(r.id)">
+            <div><strong>{{ r.title || '(sin título)' }}</strong></div>
+            <div class="meta">{{ humanize(r.category) }} / {{ humanize(r.subcategory) }} · {{ r.lang }}</div>
+            <div class="meta">{{ r.snippet }}</div>
+          </div>
+          <div class="empty" v-if="!rules.length">No hay resultados para esta selección.</div>
+        </div>
+      </section>
 
-        <section class="layout">
-          <article class="panel">
-            <div class="list-item" :class="{active: selectedRule && selectedRule.id===rule.id}" v-for="rule in filteredRules" :key="rule.id" @click="openRule(rule.id)">
-              <div><strong>{{ rule.title || '(sin título)' }}</strong></div>
-              <div class="meta">{{ displayMenuOf(rule) }} · {{ rule.lang }}</div>
-              <div class="meta">{{ rule.snippet }}</div>
-            </div>
-            <div v-if="!filteredRules.length" class="empty">No hay resultados para esos filtros.</div>
-          </article>
-
-          <article class="panel">
-            <div v-if="selectedRule" class="reader">
-              <h2>{{ selectedRule.title }}</h2>
-              <div class="reader-meta">{{ selectedRule.category }} / {{ selectedRule.subcategory }} · idioma mostrado: {{ selectedRule.lang_served }}</div>
-              <div class="reader-content" @click="handleContentClick" v-html="renderedContent"></div>
-            </div>
-            <div v-else class="empty">Selecciona una entrada del listado para ver el contenido completo.</div>
-          </article>
-        </section>
-      </main>
+      <section class="card">
+        <div class="card-head reader-head">
+          <div>
+            <p class="title" style="margin-bottom:.2rem">{{ selectedRule ? selectedRule.title : 'Reader' }}</p>
+            <div class="meta" v-if="selectedRule">{{ humanize(selectedRule.category) }} / {{ humanize(selectedRule.subcategory) }} · idioma: {{ selectedRule.lang_served }}</div>
+          </div>
+          <div class="chips">
+            <span class="chip" :class="{active: viewMode==='pretty'}" @click="viewMode='pretty'">Texto formateado</span>
+            <span class="chip" :class="{active: viewMode==='html'}" @click="viewMode='html'">HTML original (EN)</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="reader-wrap" v-if="selectedRule">
+            <div class="reader-panel" v-if="viewMode==='pretty'" v-html="prettyTextHtml"></div>
+            <div class="reader-panel" v-else @click="handleHtmlClick" v-html="htmlReader"></div>
+            <div class="empty" v-if="viewMode==='html' && !selectedRule.content_html_en">No hay HTML preservado para esta entrada (re-scrapea para poblarlo).</div>
+          </div>
+          <div class="empty" v-else>Selecciona una entrada para leerla.</div>
+        </div>
+      </section>
     </div>
 
     <script>
       const { createApp } = Vue
       const defaultApi = `${window.location.protocol}//${window.location.hostname}:8000`
 
-      const MENU_TREE = [
-        { name: 'Character Creation', children: ['Ancestries', 'Archetypes', 'Backgrounds', 'Classes'] },
-        { name: 'Equipment', children: ['All Equipment', 'Adventuring Gear', 'Alchemical Items', 'Armor', 'Held Items', 'Runes', 'Shields', 'Weapons', 'Worn Items'] },
-        { name: 'Feats', children: ['All Feats', 'General', 'General (NoSkill)', 'Skill'] },
-      ]
-
-      const MATCHERS = {
-        'Character Creation': {
-          'Ancestries': ['ancestry', 'ancestries'],
-          'Archetypes': ['archetype', 'archetypes'],
-          'Backgrounds': ['background', 'backgrounds'],
-          'Classes': ['class ', 'classes', 'class:'],
-        },
-        'Equipment': {
-          'All Equipment': ['equipment'],
-          'Adventuring Gear': ['adventuring gear'],
-          'Alchemical Items': ['alchemical'],
-          'Armor': ['armor'],
-          'Held Items': ['held item', 'held items'],
-          'Runes': ['rune', 'runes'],
-          'Shields': ['shield', 'shields'],
-          'Weapons': ['weapon', 'weapons'],
-          'Worn Items': ['worn item', 'worn items'],
-        },
-        'Feats': {
-          'All Feats': ['feat', 'feats'],
-          'General': ['general feat', 'general feats'],
-          'General (NoSkill)': ['general (noskill)', 'noskill'],
-          'Skill': ['skill feat', 'skill feats'],
-        },
-      }
-
       createApp({
         data() {
           return {
             api: defaultApi,
+            connected: false,
+            errorMsg: '',
+            stats: { pages: 0, translations_es: 0, pages_with_html: 0 },
+            taxonomy: [],
+            expanded: {},
+            menuFilter: '',
+            selected: { category: '', subcategory: '' },
             query: '',
             lang: 'es',
-            stats: { pages: 0, translations_es: 0 },
-            allRules: [],
-            selectedGroup: '',
-            selectedChild: '',
+            rules: [],
             selectedRule: null,
-            debounce: null,
-            errorMsg: '',
-            connected: false,
-            menuTree: MENU_TREE,
-            expandedGroups: {
-              'Character Creation': true,
-              Equipment: true,
-              Feats: true,
-            },
+            viewMode: 'pretty',
+            debounceId: null,
           }
         },
         computed: {
-          renderedContent() {
-            if (!this.selectedRule) return ''
-            if (this.lang === 'en' && this.selectedRule.content_html_en) {
-              return this.normalizeHtmlForReader(this.selectedRule.content_html_en)
-            }
-            return this.renderedTextToHtml(this.selectedRule.content)
+          filteredTaxonomy() {
+            const q = this.menuFilter.trim().toLowerCase()
+            if (!q) return this.taxonomy
+            return this.taxonomy
+              .map((node) => {
+                const cat = node.category.toLowerCase()
+                const subs = node.subcategories.filter((s) => s.toLowerCase().includes(q))
+                if (cat.includes(q) || subs.length) {
+                  return { category: node.category, subcategories: subs.length ? subs : node.subcategories }
+                }
+                return null
+              })
+              .filter(Boolean)
           },
-          filteredRules() {
-            const q = this.query.trim().toLowerCase()
-            return this.allRules.filter((rule) => {
-              const tag = this.classifyRule(rule)
-              if (this.selectedGroup && tag.group !== this.selectedGroup) return false
-              if (this.selectedChild && tag.child !== this.selectedChild) return false
-              if (!q) return true
-              const haystack = `${rule.title || ''} ${rule.snippet || ''} ${rule.url || ''}`.toLowerCase()
-              return haystack.includes(q)
-            })
+          prettyTextHtml() {
+            if (!this.selectedRule?.content) return ''
+            const lines = this.selectedRule.content
+              .split('\n')
+              .map((x) => x.trim())
+              .filter((x) => x.length > 0)
+
+            return lines.map((line) => {
+              const esc = line.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+              const isHeader = line.length < 72 && (line.endsWith(':') || /^[A-Z0-9\s\-()]+$/.test(line))
+              return isHeader ? `<p class="line-header">${esc}</p>` : `<p>${esc}</p>`
+            }).join('')
+          },
+          htmlReader() {
+            if (!this.selectedRule?.content_html_en) return ''
+            return this.selectedRule.content_html_en
+              .replaceAll('<table', '<table class="aon-table"')
+              .replaceAll('<a ', '<a class="aon-link" ')
           },
         },
         watch: {
-          query() { this.debouncedRefreshSelection() },
-          lang() { this.refreshAllRules() },
-          filteredRules() {
-            if (this.selectedRule && !this.filteredRules.find((x) => x.id === this.selectedRule.id)) {
-              this.selectedRule = null
-            }
-            if (!this.selectedRule && this.filteredRules.length) {
-              this.openRule(this.filteredRules[0].id)
-            }
+          query() {
+            clearTimeout(this.debounceId)
+            this.debounceId = setTimeout(() => this.refreshRules(), 220)
+          },
+          lang() { this.refreshRules() },
+          selected: {
+            deep: true,
+            handler() { this.refreshRules() },
           },
         },
-        async mounted() { await this.reconnect() },
+        async mounted() {
+          await this.reconnect()
+        },
         methods: {
+          humanize(raw) {
+            if (!raw) return 'General'
+            return raw
+              .replaceAll('_', ' ')
+              .replaceAll('-', ' ')
+              .replace(/([a-z])([A-Z])/g, '$1 $2')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .replace(/\b\w/g, (m) => m.toUpperCase())
+          },
           async apiGet(path) {
             const res = await fetch(`${this.api}${path}`)
             if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
             return res.json()
-          },
-          toggleGroup(name) {
-            this.expandedGroups[name] = !this.expandedGroups[name]
-          },
-          selectNode(group, child) {
-            this.selectedGroup = group
-            this.selectedChild = child
-          },
-          normalizeForMatch(rule) {
-            return `${rule.title || ''} ${rule.url || ''} ${rule.category || ''} ${rule.subcategory || ''} ${rule.snippet || ''}`.toLowerCase()
-          },
-          classifyRule(rule) {
-            const text = this.normalizeForMatch(rule)
-            for (const group of this.menuTree) {
-              const childrenMap = MATCHERS[group.name]
-              for (const child of group.children) {
-                const keys = childrenMap[child] || []
-                if (keys.some((k) => text.includes(k))) {
-                  return { group: group.name, child }
-                }
-              }
-            }
-            return { group: 'Other', child: 'Other' }
-          },
-          displayMenuOf(rule) {
-            const tag = this.classifyRule(rule)
-            return `${tag.group} / ${tag.child}`
-          },
-          groupCount(groupName) {
-            return this.allRules.filter((r) => this.classifyRule(r).group === groupName).length
-          },
-          childCount(groupName, childName) {
-            return this.allRules.filter((r) => {
-              const t = this.classifyRule(r)
-              return t.group === groupName && t.child === childName
-            }).length
-          },
-          debouncedRefreshSelection() {
-            clearTimeout(this.debounce)
-            this.debounce = setTimeout(() => {}, 180)
           },
           async reconnect() {
             this.errorMsg = ''
             this.connected = false
             try {
               this.stats = await this.apiGet('/stats')
+              this.taxonomy = await this.apiGet('/taxonomy')
+              for (const n of this.taxonomy) {
+                if (!(n.category in this.expanded)) this.expanded[n.category] = this.taxonomy.length <= 12
+              }
               this.connected = true
-              await this.refreshAllRules()
+              await this.refreshRules()
             } catch (err) {
-              this.errorMsg = `No se pudo conectar a API (${this.api}). Error: ${err.message}`
-              this.stats = { pages: 0, translations_es: 0 }
-              this.allRules = []
+              this.errorMsg = `No se pudo conectar con API (${this.api}): ${err.message}`
+              this.taxonomy = []
+              this.rules = []
               this.selectedRule = null
             }
           },
-          async refreshAllRules() {
+          toggle(category) {
+            this.expanded[category] = !this.expanded[category]
+          },
+          selectNode(category, subcategory) {
+            this.selected = { category, subcategory }
+          },
+          async refreshRules() {
+            if (!this.connected) return
             this.errorMsg = ''
             try {
-              const acc = []
-              let offset = 0
-              const pageSize = 500
-              while (true) {
-                const url = new URL(`${this.api}/rules`)
-                url.searchParams.set('lang', this.lang)
-                url.searchParams.set('limit', String(pageSize))
-                url.searchParams.set('offset', String(offset))
-                const data = await fetch(url).then((r) => r.json())
-                const items = data.items || []
-                acc.push(...items)
-                if (items.length < pageSize) break
-                offset += pageSize
-                if (offset >= 10000) break
+              const url = new URL(`${this.api}/rules`)
+              if (this.selected.category) url.searchParams.set('category', this.selected.category)
+              if (this.selected.subcategory) url.searchParams.set('subcategory', this.selected.subcategory)
+              if (this.query.trim()) url.searchParams.set('q', this.query.trim())
+              url.searchParams.set('lang', this.lang)
+              url.searchParams.set('limit', '250')
+              const data = await fetch(url).then((r) => r.json())
+              this.rules = data.items || []
+
+              if (this.selectedRule && !this.rules.find((x) => x.id === this.selectedRule.id)) {
+                this.selectedRule = null
               }
-              this.allRules = acc
-              if (!this.selectedRule && this.filteredRules.length) {
-                await this.openRule(this.filteredRules[0].id)
+              if (!this.selectedRule && this.rules.length) {
+                await this.openRule(this.rules[0].id)
               }
             } catch (err) {
-              this.errorMsg = `Error cargando reglas: ${err.message}`
+              this.errorMsg = `Error cargando listado: ${err.message}`
             }
           },
           async openRule(id) {
@@ -373,39 +399,21 @@
               this.errorMsg = `Error cargando detalle: ${err.message}`
             }
           },
-          renderedTextToHtml(content) {
-            if (!content) return ''
-            const lines = content
-              .split('\n')
-              .map((x) => x.trim())
-              .filter((x) => x.length > 0)
-
-            return lines
-              .map((line) => {
-                const escaped = line
-                  .replaceAll('&', '&amp;')
-                  .replaceAll('<', '&lt;')
-                  .replaceAll('>', '&gt;')
-                const isHeader = line.length < 60 && (line.endsWith(':') || /^[A-Z0-9\s\-()]+$/.test(line))
-                return isHeader ? `<p class="line-header">${escaped}</p>` : `<p>${escaped}</p>`
-              })
-              .join('')
+          nodeCount(category) {
+            return this.rules.filter((r) => r.category === category).length
           },
-          normalizeHtmlForReader(html) {
-            if (!html) return ''
-            return html
-              .replaceAll('<table', '<table class="aon-table"')
-              .replaceAll('<a ', '<a class="aon-link" ')
+          subCount(category, sub) {
+            return this.rules.filter((r) => r.category === category && r.subcategory === sub).length
           },
-          async handleContentClick(event) {
-            const anchor = event.target.closest('a[data-internal-url]')
-            if (!anchor) return
+          async handleHtmlClick(event) {
+            const a = event.target.closest('a[data-internal-url]')
+            if (!a) return
             event.preventDefault()
-            const internalUrl = anchor.getAttribute('data-internal-url')
-            if (!internalUrl) return
+            const internal = a.getAttribute('data-internal-url')
+            if (!internal) return
             try {
-              const url = `${this.api}/rules/by-url?url=${encodeURIComponent(internalUrl)}&lang=${this.lang}`
-              this.selectedRule = await fetch(url).then((r) => r.json())
+              const detail = await this.apiGet(`/rules/by-url?url=${encodeURIComponent(internal)}&lang=${this.lang}`)
+              this.selectedRule = detail
             } catch (err) {
               this.errorMsg = `No se pudo abrir enlace interno: ${err.message}`
             }

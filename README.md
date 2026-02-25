@@ -144,3 +144,16 @@ Opcionalmente, para coherencia total de búsqueda semántica/traducciones despu�
 pathfinder-es translate --db data/pathfinder.db --lang es
 pathfinder-es embed --db data/pathfinder.db --dims 128
 ```
+
+
+## Frontend Reader v2
+
+Se ha rediseñado el frontend en 3 paneles para que sea manejable:
+
+- **Panel izquierdo:** árbol desplegable de categorías/subcategorías con filtro rápido.
+- **Panel central:** listado de resultados filtrados por categoría/subcategoría + búsqueda textual.
+- **Panel derecho (reader):**
+  - `Texto formateado` (lectura limpia),
+  - `HTML original (EN)` para preservar tablas, enlaces y estructura de AON.
+
+Los enlaces internos dentro del HTML (`data-internal-url`) son navegables desde el propio reader.

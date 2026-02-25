@@ -101,6 +101,21 @@
         margin-top: 1.1rem;
         color: #0f172a;
       }
+      .reader-content .aon-link { color: #1d4ed8; text-decoration: underline; }
+      .reader-content .aon-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: .8rem 0;
+        font-size: .95rem;
+      }
+      .reader-content .aon-table th,
+      .reader-content .aon-table td {
+        border: 1px solid #cbd5e1;
+        padding: .4rem .45rem;
+      }
+      .reader-content .aon-table th {
+        background: #e2e8f0;
+      }
 
       @media (max-width: 1100px) { .app, .layout { grid-template-columns: 1fr; } }
     </style>
@@ -165,12 +180,7 @@
             <div v-if="selectedRule" class="reader">
               <h2>{{ selectedRule.title }}</h2>
               <div class="reader-meta">{{ selectedRule.category }} / {{ selectedRule.subcategory }} · idioma mostrado: {{ selectedRule.lang_served }}</div>
-              <div class="reader-content">
-                <template v-for="(line, idx) in formattedLines(selectedRule.content)" :key="idx">
-                  <p v-if="line.type==='p'">{{ line.text }}</p>
-                  <p v-else class="line-header">{{ line.text }}</p>
-                </template>
-              </div>
+              <div class="reader-content" @click="handleContentClick" v-html="renderedContent"></div>
             </div>
             <div v-else class="empty">Selecciona una entrada del listado para ver el contenido completo.</div>
           </article>
@@ -237,6 +247,13 @@
           }
         },
         computed: {
+          renderedContent() {
+            if (!this.selectedRule) return ''
+            if (this.lang === 'en' && this.selectedRule.content_html_en) {
+              return this.normalizeHtmlForReader(this.selectedRule.content_html_en)
+            }
+            return this.renderedTextToHtml(this.selectedRule.content)
+          },
           filteredRules() {
             const q = this.query.trim().toLowerCase()
             return this.allRules.filter((rule) => {
@@ -356,17 +373,42 @@
               this.errorMsg = `Error cargando detalle: ${err.message}`
             }
           },
-          formattedLines(content) {
-            if (!content) return []
+          renderedTextToHtml(content) {
+            if (!content) return ''
             const lines = content
               .split('\n')
               .map((x) => x.trim())
               .filter((x) => x.length > 0)
 
-            return lines.map((line) => {
-              const isHeader = line.length < 60 && (line.endsWith(':') || /^[A-Z0-9\s\-()]+$/.test(line))
-              return { type: isHeader ? 'h' : 'p', text: line }
-            })
+            return lines
+              .map((line) => {
+                const escaped = line
+                  .replaceAll('&', '&amp;')
+                  .replaceAll('<', '&lt;')
+                  .replaceAll('>', '&gt;')
+                const isHeader = line.length < 60 && (line.endsWith(':') || /^[A-Z0-9\s\-()]+$/.test(line))
+                return isHeader ? `<p class="line-header">${escaped}</p>` : `<p>${escaped}</p>`
+              })
+              .join('')
+          },
+          normalizeHtmlForReader(html) {
+            if (!html) return ''
+            return html
+              .replaceAll('<table', '<table class="aon-table"')
+              .replaceAll('<a ', '<a class="aon-link" ')
+          },
+          async handleContentClick(event) {
+            const anchor = event.target.closest('a[data-internal-url]')
+            if (!anchor) return
+            event.preventDefault()
+            const internalUrl = anchor.getAttribute('data-internal-url')
+            if (!internalUrl) return
+            try {
+              const url = `${this.api}/rules/by-url?url=${encodeURIComponent(internalUrl)}&lang=${this.lang}`
+              this.selectedRule = await fetch(url).then((r) => r.json())
+            } catch (err) {
+              this.errorMsg = `No se pudo abrir enlace interno: ${err.message}`
+            }
           },
         },
       }).mount('#app')

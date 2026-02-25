@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from urllib.parse import unquote
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,17 +27,11 @@ def _build_taxonomy(rows: list) -> list[dict]:
         sub = (row["subcategory"] or "general").strip().lower()
         tree.setdefault(cat, set()).add(sub)
 
-    return [
-        {
-            "category": cat,
-            "subcategories": sorted(tree[cat]),
-        }
-        for cat in sorted(tree)
-    ]
+    return [{"category": cat, "subcategories": sorted(tree[cat])} for cat in sorted(tree)]
 
 
 def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
-    app = FastAPI(title="Pathfinder ES API", version="0.3.0")
+    app = FastAPI(title="Pathfinder ES API", version="0.4.0")
 
     app.add_middleware(
         CORSMiddleware,
@@ -50,28 +45,24 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-
     @app.get("/stats")
     def stats() -> dict:
         with connect(db_path) as conn:
             pages = conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
             translated_es = conn.execute("SELECT COUNT(*) FROM translations WHERE lang = 'es'").fetchone()[0]
-        return {"pages": pages, "translations_es": translated_es}
+            html_pages = conn.execute("SELECT COUNT(*) FROM pages WHERE content_html_en IS NOT NULL AND content_html_en != ''").fetchone()[0]
+        return {"pages": pages, "translations_es": translated_es, "pages_with_html": html_pages}
 
     @app.get("/taxonomy")
     def taxonomy() -> list[dict]:
         with connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT DISTINCT category, subcategory FROM pages ORDER BY category, subcategory"
-            ).fetchall()
+            rows = conn.execute("SELECT DISTINCT category, subcategory FROM pages ORDER BY category, subcategory").fetchall()
         return _build_taxonomy(rows)
 
     @app.get("/categories")
     def categories() -> list[str]:
         with connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT DISTINCT category FROM pages WHERE category IS NOT NULL ORDER BY category"
-            ).fetchall()
+            rows = conn.execute("SELECT DISTINCT category FROM pages WHERE category IS NOT NULL ORDER BY category").fetchall()
         return [row[0] for row in rows]
 
     @app.get("/rules")
@@ -93,14 +84,16 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
                 where.append("p.subcategory = ?")
                 params.append(subcategory.lower())
             if q:
-                where.append("(LOWER(p.title) LIKE ? OR LOWER(p.content_en) LIKE ? OR LOWER(COALESCE(t.content,'')) LIKE ?)")
+                where.append("(LOWER(p.title) LIKE ? OR LOWER(COALESCE(p.content_text_en, p.content_en)) LIKE ? OR LOWER(COALESCE(t.content,'')) LIKE ?)")
                 like = f"%{q.lower()}%"
                 params.extend([like, like, like])
 
             where_sql = f"WHERE {' AND '.join(where)}" if where else ""
             rows = conn.execute(
                 f"""
-                SELECT p.id, p.url, p.title, p.category, p.subcategory, p.content_en, t.content AS content_lang
+                SELECT p.id, p.url, p.title, p.category, p.subcategory,
+                       COALESCE(p.content_text_en, p.content_en) AS content_text,
+                       t.content AS content_lang
                 FROM pages p
                 LEFT JOIN translations t ON t.page_id = p.id AND t.lang = ?
                 {where_sql}
@@ -112,7 +105,7 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
 
         items = []
         for row in rows:
-            content = row["content_lang"] if row["content_lang"] else row["content_en"]
+            content = row["content_lang"] if row["content_lang"] else row["content_text"]
             items.append(
                 {
                     "id": row["id"],
@@ -121,18 +114,36 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
                     "category": row["category"],
                     "subcategory": row["subcategory"],
                     "lang": lang if row["content_lang"] else "en",
-                    "snippet": content[:600],
+                    "snippet": (content or "")[:600],
                 }
             )
 
         return {"items": items, "count": len(items)}
+
+    def _row_to_rule_detail(row, lang: str) -> dict:
+        html_content = row["content_html_en"]
+        text_content = row["content_lang"] if row["content_lang"] else row["content_text"]
+        return {
+            "id": row["id"],
+            "url": row["url"],
+            "title": row["title"],
+            "category": row["category"],
+            "subcategory": row["subcategory"],
+            "lang_served": lang if row["content_lang"] else "en",
+            "content": text_content,
+            "content_html_en": html_content,
+            "has_html": bool(html_content),
+        }
 
     @app.get("/rules/{page_id}")
     def get_rule(page_id: int, lang: str = Query("es", pattern="^[a-z]{2}$")) -> dict:
         with connect(db_path) as conn:
             row = conn.execute(
                 """
-                SELECT p.id, p.url, p.title, p.category, p.subcategory, p.content_en, t.content AS content_lang
+                SELECT p.id, p.url, p.title, p.category, p.subcategory,
+                       COALESCE(p.content_text_en, p.content_en) AS content_text,
+                       p.content_html_en,
+                       t.content AS content_lang
                 FROM pages p
                 LEFT JOIN translations t ON t.page_id = p.id AND t.lang = ?
                 WHERE p.id = ?
@@ -142,17 +153,28 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
 
         if not row:
             raise HTTPException(status_code=404, detail="Rule not found")
+        return _row_to_rule_detail(row, lang=lang)
 
-        return {
-            "id": row["id"],
-            "url": row["url"],
-            "title": row["title"],
-            "category": row["category"],
-            "subcategory": row["subcategory"],
-            "lang_served": lang if row["content_lang"] else "en",
-            "content": row["content_lang"] if row["content_lang"] else row["content_en"],
-            "content_en": row["content_en"],
-        }
+    @app.get("/rules/by-url")
+    def get_rule_by_url(url: str, lang: str = Query("es", pattern="^[a-z]{2}$")) -> dict:
+        decoded_url = unquote(url)
+        with connect(db_path) as conn:
+            row = conn.execute(
+                """
+                SELECT p.id, p.url, p.title, p.category, p.subcategory,
+                       COALESCE(p.content_text_en, p.content_en) AS content_text,
+                       p.content_html_en,
+                       t.content AS content_lang
+                FROM pages p
+                LEFT JOIN translations t ON t.page_id = p.id AND t.lang = ?
+                WHERE p.url = ?
+                """,
+                (lang, decoded_url),
+            ).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Rule not found for URL")
+        return _row_to_rule_detail(row, lang=lang)
 
     @app.get("/rules/{page_id}/related")
     def related_rules(page_id: int, limit: int = Query(10, ge=1, le=50), lang: str = Query("es", pattern="^[a-z]{2}$")) -> dict:
@@ -160,29 +182,22 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
         key = _cache_key("related", request_payload)
 
         with connect(db_path) as conn:
-            cached = conn.execute(
-                "SELECT payload_json FROM semantic_cache WHERE cache_key = ?",
-                (key,),
-            ).fetchone()
+            cached = conn.execute("SELECT payload_json FROM semantic_cache WHERE cache_key = ?", (key,)).fetchone()
             if cached:
                 return json.loads(cached[0])
 
-            current = conn.execute(
-                "SELECT id, content_en FROM pages WHERE id = ?",
-                (page_id,),
-            ).fetchone()
+            current = conn.execute("SELECT id, COALESCE(content_text_en, content_en) AS content_source FROM pages WHERE id = ?", (page_id,)).fetchone()
             if not current:
                 raise HTTPException(status_code=404, detail="Rule not found")
 
-            source_vec_row = conn.execute(
-                "SELECT vector_json FROM page_vectors WHERE page_id = ?",
-                (page_id,),
-            ).fetchone()
-            source_vec = from_json(source_vec_row[0]) if source_vec_row else build_hash_embedding(current["content_en"])
+            source_vec_row = conn.execute("SELECT vector_json FROM page_vectors WHERE page_id = ?", (page_id,)).fetchone()
+            source_vec = from_json(source_vec_row[0]) if source_vec_row else build_hash_embedding(current["content_source"])
 
             candidates = conn.execute(
                 """
-                SELECT p.id, p.title, p.category, p.subcategory, p.url, p.content_en, pv.vector_json
+                SELECT p.id, p.title, p.category, p.subcategory, p.url,
+                       COALESCE(p.content_text_en, p.content_en) AS content_source,
+                       pv.vector_json
                 FROM pages p
                 LEFT JOIN page_vectors pv ON pv.page_id = p.id
                 WHERE p.id != ?
@@ -193,7 +208,7 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
 
             scored = []
             for row in candidates:
-                target_vec = from_json(row["vector_json"]) if row["vector_json"] else build_hash_embedding(row["content_en"])
+                target_vec = from_json(row["vector_json"]) if row["vector_json"] else build_hash_embedding(row["content_source"])
                 score = cosine(source_vec, target_vec)
                 scored.append((score, row))
 

@@ -18,16 +18,18 @@ def cmd_scrape(args: argparse.Namespace) -> None:
         for page in scraper.crawl(max_pages=args.max_pages):
             conn.execute(
                 """
-                INSERT INTO pages (url, title, category, subcategory, content_en, crawled_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO pages (url, title, category, subcategory, content_en, content_text_en, content_html_en, crawled_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(url) DO UPDATE SET
                   title=excluded.title,
                   category=excluded.category,
                   subcategory=excluded.subcategory,
                   content_en=excluded.content_en,
+                  content_text_en=excluded.content_text_en,
+                  content_html_en=excluded.content_html_en,
                   crawled_at=excluded.crawled_at
                 """,
-                (page.url, page.title, page.category, page.subcategory, page.content_en, utc_now_iso()),
+                (page.url, page.title, page.category, page.subcategory, page.content_text_en, page.content_text_en, page.content_html_en, utc_now_iso()),
             )
         conn.commit()
 
@@ -43,7 +45,7 @@ def cmd_translate(args: argparse.Namespace) -> None:
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT id, content_en
+            SELECT id, COALESCE(content_text_en, content_en) AS content_source
             FROM pages
             ORDER BY id
             LIMIT ?
@@ -51,8 +53,8 @@ def cmd_translate(args: argparse.Namespace) -> None:
             (args.limit,),
         ).fetchall()
 
-        for page_id, content_en in rows:
-            translated = translator.translate(content_en)
+        for page_id, content_source in rows:
+            translated = translator.translate(content_source)
             conn.execute(
                 """
                 INSERT INTO translations (page_id, lang, content, translated_at)
@@ -75,7 +77,7 @@ def cmd_export(args: argparse.Namespace) -> None:
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT p.url, p.title, p.category, p.subcategory, p.content_en, t.content AS content_es
+            SELECT p.url, p.title, p.category, p.subcategory, COALESCE(p.content_text_en, p.content_en), p.content_html_en, t.content AS content_es
             FROM pages p
             LEFT JOIN translations t ON t.page_id = p.id AND t.lang = 'es'
             ORDER BY p.id
@@ -88,7 +90,8 @@ def cmd_export(args: argparse.Namespace) -> None:
             "title": row[1],
             "category": row[2],
             "subcategory": row[3],
-            "content": {"en": row[4], "es": row[5]},
+            "content": {"en": row[4], "es": row[6]},
+            "content_html_en": row[5],
         }
         for row in rows
     ]
@@ -100,9 +103,9 @@ def cmd_export(args: argparse.Namespace) -> None:
 def cmd_embed(args: argparse.Namespace) -> None:
     db_path = Path(args.db)
     with connect(db_path) as conn:
-        rows = conn.execute("SELECT id, content_en FROM pages ORDER BY id LIMIT ?", (args.limit,)).fetchall()
+        rows = conn.execute("SELECT id, COALESCE(content_text_en, content_en) AS content_source FROM pages ORDER BY id LIMIT ?", (args.limit,)).fetchall()
         for row in rows:
-            vec = build_hash_embedding(row["content_en"], dims=args.dims)
+            vec = build_hash_embedding(row["content_source"], dims=args.dims)
             conn.execute(
                 """
                 INSERT INTO page_vectors (page_id, model, vector_json, updated_at)

@@ -5,7 +5,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -17,7 +17,8 @@ class PageData:
     title: str
     category: str
     subcategory: str
-    content_en: str
+    content_text_en: str
+    content_html_en: str
 
 
 class AONScraper:
@@ -36,7 +37,7 @@ class AONScraper:
         self.session = session or requests.Session()
         self.session.headers.update(
             {
-                "User-Agent": "PathfinderESBot/0.1 (+internal-use, with-permission)",
+                "User-Agent": "PathfinderESBot/0.2 (+internal-use, with-permission)",
                 "Accept-Language": "en-US,en;q=0.9",
             }
         )
@@ -51,17 +52,16 @@ class AONScraper:
                 continue
             seen.add(url)
 
-            page = self._fetch_page(url)
+            page, discovered_links = self._fetch_page(url)
             if page:
                 yield page
-
-                for link in self._extract_links(page.url):
+                for link in discovered_links:
                     if link not in seen:
                         queue.append(link)
 
             time.sleep(self.delay_s)
 
-    def _fetch_page(self, url: str) -> PageData | None:
+    def _fetch_page(self, url: str) -> tuple[PageData | None, list[str]]:
         response = self.session.get(url, timeout=self.timeout_s)
         response.raise_for_status()
 
@@ -70,40 +70,65 @@ class AONScraper:
 
         main = soup.select_one("main") or soup.select_one("#main") or soup.body
         if not main:
-            return None
+            return None, []
 
-        for tag in main.select("script, style, nav, footer"):
+        for tag in main.select("script, style"):
             tag.decompose()
 
+        discovered_links = self._rewrite_and_collect_links(main=main, base_url=url)
+
         text = "\n".join(line.strip() for line in main.get_text("\n").splitlines() if line.strip())
+        html = str(main)
         if not text:
-            return None
+            return None, discovered_links
 
         category, subcategory = self._categorize_url(url)
-        return PageData(url=url, title=title, category=category, subcategory=subcategory, content_en=text)
+        return (
+            PageData(
+                url=url,
+                title=title,
+                category=category,
+                subcategory=subcategory,
+                content_text_en=text,
+                content_html_en=html,
+            ),
+            discovered_links,
+        )
 
-    def _extract_links(self, base_url: str) -> list[str]:
-        response = self.session.get(base_url, timeout=self.timeout_s)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "lxml")
-
+    def _rewrite_and_collect_links(self, main, base_url: str) -> list[str]:
         links: list[str] = []
-        for anchor in soup.select("a[href]"):
-            href = anchor.get("href")
+
+        for anchor in main.select("a[href]"):
+            href = (anchor.get("href") or "").strip()
             if not href:
                 continue
+
             absolute = urljoin(base_url, href)
-            parsed = urlparse(absolute)
-            if parsed.scheme not in {"http", "https"}:
+            normalized = self._normalize_url(absolute)
+            if not normalized:
                 continue
-            if parsed.netloc != self.allowed_domain:
-                continue
-            normalized = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-            if parsed.query:
-                normalized += f"?{parsed.query}"
-            links.append(normalized)
+
+            parsed = urlparse(normalized)
+            if parsed.netloc == self.allowed_domain:
+                links.append(normalized)
+                anchor["href"] = "#"
+                anchor["data-internal-url"] = normalized
+            else:
+                anchor["href"] = normalized
+                anchor["target"] = "_blank"
+                anchor["rel"] = "noopener noreferrer"
 
         return list(dict.fromkeys(links))
+
+    def _normalize_url(self, url: str) -> str | None:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            return None
+
+        query_pairs = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if not k.lower().startswith("utm_")]
+        query = urlencode(query_pairs, doseq=True)
+
+        return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", query, ""))
 
     @staticmethod
     def _categorize_url(url: str) -> tuple[str, str]:

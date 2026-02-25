@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS pages (
     category TEXT,
     subcategory TEXT,
     content_en TEXT NOT NULL,
+    content_text_en TEXT,
+    content_html_en TEXT,
     crawled_at TEXT NOT NULL
 );
 
@@ -46,6 +48,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE pages ADD COLUMN category TEXT")
     if "subcategory" not in cols:
         conn.execute("ALTER TABLE pages ADD COLUMN subcategory TEXT")
+    if "content_text_en" not in cols:
+        conn.execute("ALTER TABLE pages ADD COLUMN content_text_en TEXT")
+    if "content_html_en" not in cols:
+        conn.execute("ALTER TABLE pages ADD COLUMN content_html_en TEXT")
+
+    conn.execute(
+        """
+        UPDATE pages
+        SET content_text_en = COALESCE(content_text_en, content_en)
+        WHERE content_text_en IS NULL OR content_text_en = ''
+        """
+    )
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:

@@ -119,3 +119,28 @@ Ahora presenta un menú legible y desplegable por dominios:
   - Skill
 
 La asignación a ese menú se hace por coincidencias de texto (`title`, `url`, etc.) para que sea navegable incluso con datos scrapeados heterogéneos.
+
+
+## Cambios en el scraping (HTML completo)
+
+Ahora el scraper guarda **dos representaciones** por página:
+
+- `content_text_en`: texto para búsqueda/traducción/embeddings.
+- `content_html_en`: HTML del contenido principal con estructura (títulos, tablas, enlaces, etc.).
+
+Además, los enlaces internos de AON se conservan como referencias navegables dentro de tu app (`data-internal-url`) para saltar entre reglas relacionadas.
+
+### ¿Tengo que volver a ejecutar todo?
+
+**Sí, debes volver a ejecutar al menos el scraping** para llenar `content_html_en` y mejorar el formato:
+
+```bash
+pathfinder-es scrape --db data/pathfinder.db --max-pages 300
+```
+
+Opcionalmente, para coherencia total de búsqueda semántica/traducciones después del re-scrape:
+
+```bash
+pathfinder-es translate --db data/pathfinder.db --lang es
+pathfinder-es embed --db data/pathfinder.db --dims 128
+```

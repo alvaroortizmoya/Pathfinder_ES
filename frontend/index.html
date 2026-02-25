@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pathfinder ES - Buscador Interno</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 1100px; margin: 0 auto; padding: 1rem; }
+      .row { display: flex; gap: .75rem; flex-wrap: wrap; }
+      input, select, button { padding: .5rem; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: .75rem; margin-top: .75rem; }
+      .muted { color: #666; font-size: .9rem; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <h1>Pathfinder 2e (interno)</h1>
+      <div class="row">
+        <input v-model="query" placeholder="Buscar reglas, traits, acciones..." @keyup.enter="search" />
+        <select v-model="category">
+          <option value="">Todas las categorías</option>
+          <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+        </select>
+        <select v-model="lang">
+          <option value="es">Castellano</option>
+          <option value="en">English</option>
+        </select>
+        <button @click="search">Buscar</button>
+      </div>
+
+      <div class="card" v-for="rule in rules" :key="rule.id">
+        <h3>{{ rule.title || '(sin título)' }}</h3>
+        <div class="muted">{{ rule.category }} · {{ rule.lang }} · ID {{ rule.id }}</div>
+        <p>{{ rule.snippet }}</p>
+        <button @click="loadRelated(rule.id)">Reglas relacionadas</button>
+        <ul v-if="related[rule.id]">
+          <li v-for="item in related[rule.id]" :key="item.id">
+            {{ item.title }} ({{ item.category }}) - score {{ item.score }}
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      const { createApp } = Vue
+      createApp({
+        data() {
+          return {
+            api: 'http://localhost:8000',
+            query: '',
+            category: '',
+            lang: 'es',
+            categories: [],
+            rules: [],
+            related: {}
+          }
+        },
+        async mounted() {
+          const cats = await fetch(`${this.api}/categories`).then(r => r.json())
+          this.categories = cats
+          await this.search()
+        },
+        methods: {
+          async search() {
+            const url = new URL(`${this.api}/rules`)
+            if (this.query) url.searchParams.set('q', this.query)
+            if (this.category) url.searchParams.set('category', this.category)
+            url.searchParams.set('lang', this.lang)
+            const data = await fetch(url).then(r => r.json())
+            this.rules = data.items
+          },
+          async loadRelated(id) {
+            const url = `${this.api}/rules/${id}/related?limit=5&lang=${this.lang}`
+            const data = await fetch(url).then(r => r.json())
+            this.related[id] = data.items
+          }
+        }
+      }).mount('#app')
+    </script>
+  </body>
+</html>

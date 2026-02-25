@@ -6,7 +6,7 @@ Pipeline para montar una copia interna bilingüe (EN/ES) de contenido de Pathfin
 - Base de datos SQLite
 - Traducción EN→ES
 - Backend FastAPI (búsqueda + filtros)
-- Frontend Vue con toggle de idioma
+- Frontend dinámico (Vue) con menú de categorías/subcategorías
 - Capa opcional de búsqueda semántica (embeddings hash + cache)
 
 > ⚠️ Úsalo solo con consentimiento explícito del propietario del contenido y respetando ToS/robots/copyright.
@@ -45,11 +45,9 @@ pathfinder-es embed --db data/pathfinder.db --dims 128
 pathfinder-es serve --host 0.0.0.0 --port 8000
 ```
 
-Documentación interactiva: `http://localhost:8000/docs`
+Docs API: `http://localhost:8000/docs`
 
-### 5) Frontend interno
-
-Sirve `frontend/index.html` con cualquier servidor estático:
+### 5) Frontend moderno y dinámico
 
 ```bash
 python -m http.server 4173 -d frontend
@@ -59,14 +57,14 @@ Abre `http://localhost:4173`.
 
 ## Endpoints principales
 
-- `GET /rules?q=&category=&lang=&limit=&offset=`
+- `GET /taxonomy` (categorías + subcategorías)
+- `GET /rules?q=&category=&subcategory=&lang=&limit=&offset=`
 - `GET /rules/{id}`
 - `GET /rules/{id}/related?limit=&lang=`
 - `GET /categories`
 
-## Notas de arquitectura
+## Notas
 
-- `pages.category` se infiere de la URL (primer segmento de path) y permite filtros.
-- `page_vectors` guarda embeddings hash (sin dependencias pesadas).
-- `semantic_cache` cachea resultados de relacionados para consultas repetidas.
-- Si falta traducción en `lang`, el backend hace fallback a contenido EN.
+- El frontend refresca resultados en tiempo real al escribir (debounce).
+- `pages.subcategory` se rellena desde la URL durante el scraping.
+- Si falta traducción para `lang`, el backend usa fallback EN.

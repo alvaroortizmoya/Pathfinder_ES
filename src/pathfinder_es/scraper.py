@@ -16,6 +16,7 @@ class PageData:
     url: str
     title: str
     category: str
+    subcategory: str
     content_en: str
 
 
@@ -78,7 +79,8 @@ class AONScraper:
         if not text:
             return None
 
-        return PageData(url=url, title=title, category=self._category_from_url(url), content_en=text)
+        category, subcategory = self._categorize_url(url)
+        return PageData(url=url, title=title, category=category, subcategory=subcategory, content_en=text)
 
     def _extract_links(self, base_url: str) -> list[str]:
         response = self.session.get(base_url, timeout=self.timeout_s)
@@ -104,11 +106,13 @@ class AONScraper:
         return list(dict.fromkeys(links))
 
     @staticmethod
-    def _category_from_url(url: str) -> str:
-        path = urlparse(url).path.strip("/")
-        if not path:
-            return "home"
-        return path.split("/")[0].lower()
+    def _categorize_url(url: str) -> tuple[str, str]:
+        parts = [p for p in urlparse(url).path.strip("/").split("/") if p]
+        if not parts:
+            return "home", "root"
+        if len(parts) == 1:
+            return parts[0].lower(), "general"
+        return parts[0].lower(), parts[1].lower()
 
 
 def utc_now_iso() -> str:

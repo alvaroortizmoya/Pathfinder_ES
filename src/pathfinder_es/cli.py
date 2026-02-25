@@ -18,15 +18,16 @@ def cmd_scrape(args: argparse.Namespace) -> None:
         for page in scraper.crawl(max_pages=args.max_pages):
             conn.execute(
                 """
-                INSERT INTO pages (url, title, category, content_en, crawled_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO pages (url, title, category, subcategory, content_en, crawled_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(url) DO UPDATE SET
                   title=excluded.title,
                   category=excluded.category,
+                  subcategory=excluded.subcategory,
                   content_en=excluded.content_en,
                   crawled_at=excluded.crawled_at
                 """,
-                (page.url, page.title, page.category, page.content_en, utc_now_iso()),
+                (page.url, page.title, page.category, page.subcategory, page.content_en, utc_now_iso()),
             )
         conn.commit()
 
@@ -74,7 +75,7 @@ def cmd_export(args: argparse.Namespace) -> None:
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT p.url, p.title, p.category, p.content_en, t.content AS content_es
+            SELECT p.url, p.title, p.category, p.subcategory, p.content_en, t.content AS content_es
             FROM pages p
             LEFT JOIN translations t ON t.page_id = p.id AND t.lang = 'es'
             ORDER BY p.id
@@ -86,7 +87,8 @@ def cmd_export(args: argparse.Namespace) -> None:
             "url": row[0],
             "title": row[1],
             "category": row[2],
-            "content": {"en": row[3], "es": row[4]},
+            "subcategory": row[3],
+            "content": {"en": row[4], "es": row[5]},
         }
         for row in rows
     ]

@@ -19,8 +19,24 @@ def _cache_key(prefix: str, payload: dict) -> str:
     return f"{prefix}:{digest}"
 
 
+def _build_taxonomy(rows: list) -> list[dict]:
+    tree: dict[str, set[str]] = {}
+    for row in rows:
+        cat = (row["category"] or "uncategorized").strip().lower()
+        sub = (row["subcategory"] or "general").strip().lower()
+        tree.setdefault(cat, set()).add(sub)
+
+    return [
+        {
+            "category": cat,
+            "subcategories": sorted(tree[cat]),
+        }
+        for cat in sorted(tree)
+    ]
+
+
 def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
-    app = FastAPI(title="Pathfinder ES API", version="0.2.0")
+    app = FastAPI(title="Pathfinder ES API", version="0.3.0")
 
     app.add_middleware(
         CORSMiddleware,
@@ -34,6 +50,14 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/taxonomy")
+    def taxonomy() -> list[dict]:
+        with connect(db_path) as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT category, subcategory FROM pages ORDER BY category, subcategory"
+            ).fetchall()
+        return _build_taxonomy(rows)
+
     @app.get("/categories")
     def categories() -> list[str]:
         with connect(db_path) as conn:
@@ -46,32 +70,36 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
     def list_rules(
         q: str | None = None,
         category: str | None = None,
+        subcategory: str | None = None,
         lang: str = Query("es", pattern="^[a-z]{2}$"),
-        limit: int = Query(20, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=500),
         offset: int = Query(0, ge=0),
     ) -> dict:
         with connect(db_path) as conn:
-            params: list = []
+            params: list = [lang]
             where = []
             if category:
                 where.append("p.category = ?")
-                params.append(category)
+                params.append(category.lower())
+            if subcategory:
+                where.append("p.subcategory = ?")
+                params.append(subcategory.lower())
             if q:
-                where.append("(p.title LIKE ? OR p.content_en LIKE ? OR COALESCE(t.content,'') LIKE ?)")
-                like = f"%{q}%"
+                where.append("(LOWER(p.title) LIKE ? OR LOWER(p.content_en) LIKE ? OR LOWER(COALESCE(t.content,'')) LIKE ?)")
+                like = f"%{q.lower()}%"
                 params.extend([like, like, like])
 
             where_sql = f"WHERE {' AND '.join(where)}" if where else ""
             rows = conn.execute(
                 f"""
-                SELECT p.id, p.url, p.title, p.category, p.content_en, t.content AS content_lang
+                SELECT p.id, p.url, p.title, p.category, p.subcategory, p.content_en, t.content AS content_lang
                 FROM pages p
                 LEFT JOIN translations t ON t.page_id = p.id AND t.lang = ?
                 {where_sql}
-                ORDER BY p.id
+                ORDER BY p.title COLLATE NOCASE, p.id
                 LIMIT ? OFFSET ?
                 """,
-                [lang, *params, limit, offset],
+                [*params, limit, offset],
             ).fetchall()
 
         items = []
@@ -83,6 +111,7 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
                     "url": row["url"],
                     "title": row["title"],
                     "category": row["category"],
+                    "subcategory": row["subcategory"],
                     "lang": lang if row["content_lang"] else "en",
                     "snippet": content[:600],
                 }
@@ -95,7 +124,7 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
         with connect(db_path) as conn:
             row = conn.execute(
                 """
-                SELECT p.id, p.url, p.title, p.category, p.content_en, t.content AS content_lang
+                SELECT p.id, p.url, p.title, p.category, p.subcategory, p.content_en, t.content AS content_lang
                 FROM pages p
                 LEFT JOIN translations t ON t.page_id = p.id AND t.lang = ?
                 WHERE p.id = ?
@@ -111,10 +140,10 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
             "url": row["url"],
             "title": row["title"],
             "category": row["category"],
-            "content": {
-                "en": row["content_en"],
-                lang: row["content_lang"],
-            },
+            "subcategory": row["subcategory"],
+            "lang_served": lang if row["content_lang"] else "en",
+            "content": row["content_lang"] if row["content_lang"] else row["content_en"],
+            "content_en": row["content_en"],
         }
 
     @app.get("/rules/{page_id}/related")
@@ -145,7 +174,7 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
 
             candidates = conn.execute(
                 """
-                SELECT p.id, p.title, p.category, p.url, p.content_en, pv.vector_json
+                SELECT p.id, p.title, p.category, p.subcategory, p.url, p.content_en, pv.vector_json
                 FROM pages p
                 LEFT JOIN page_vectors pv ON pv.page_id = p.id
                 WHERE p.id != ?
@@ -166,6 +195,7 @@ def create_app(db_path: Path = DEFAULT_DB) -> FastAPI:
                     "id": row["id"],
                     "title": row["title"],
                     "category": row["category"],
+                    "subcategory": row["subcategory"],
                     "url": row["url"],
                     "score": round(score, 4),
                 }

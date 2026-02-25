@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS pages (
     url TEXT UNIQUE NOT NULL,
     title TEXT,
     category TEXT,
+    subcategory TEXT,
     content_en TEXT NOT NULL,
     crawled_at TEXT NOT NULL
 );
@@ -40,12 +41,11 @@ CREATE TABLE IF NOT EXISTS semantic_cache (
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    cols = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info(pages)").fetchall()
-    }
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(pages)").fetchall()}
     if "category" not in cols:
         conn.execute("ALTER TABLE pages ADD COLUMN category TEXT")
+    if "subcategory" not in cols:
+        conn.execute("ALTER TABLE pages ADD COLUMN subcategory TEXT")
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
